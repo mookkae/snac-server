@@ -2,8 +2,6 @@ package com.ureca.snac.wallet.entity;
 
 import com.ureca.snac.common.BaseTimeEntity;
 import com.ureca.snac.member.entity.Member;
-import com.ureca.snac.wallet.exception.InsufficientBalanceException;
-import com.ureca.snac.wallet.exception.InvalidAMountException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -25,58 +23,127 @@ public class Wallet extends BaseTimeEntity {
     @JoinColumn(name = "member_id", nullable = false, unique = true)
     private Member member;
 
-    @Column(name = "balance_point", nullable = false)
-    private Long point;
+    @Embedded
+    @AttributeOverrides({
+            @AttributeOverride(name = "balance", column = @Column(name = "balance_money", nullable = false)),
+            @AttributeOverride(name = "escrow", column = @Column(name = "balance_escrow_money", nullable = false))
+    })
+    private AssetBalance money;
 
-    @Column(name = "balance_money", nullable = false)
-    private Long money;
+    @Embedded
+    @AttributeOverrides({
+            @AttributeOverride(name = "balance", column = @Column(name = "balance_point", nullable = false)),
+            @AttributeOverride(name = "escrow", column = @Column(name = "balance_escrow_point", nullable = false))
+    })
+    private AssetBalance point;
 
     @Builder
-    private Wallet(Member member, Long point, Long money) {
+    private Wallet(Member member, AssetBalance money, AssetBalance point) {
         this.member = member;
-        this.point = point;
         this.money = money;
+        this.point = point;
     }
 
     public static Wallet create(Member member) {
         return Wallet.builder()
                 .member(member)
-                .point(0L)
-                .money(0L)
+                .money(AssetBalance.init())
+                .point(AssetBalance.init())
                 .build();
     }
 
     public void depositMoney(long amount) {
-        if (amount <= 0) {
-            throw new InvalidAMountException();
-        }
-        this.money += amount;
+        this.money.deposit(amount);
     }
 
     public void withdrawMoney(long amount) {
-        if (amount <= 0) {
-            throw new InvalidAMountException();
-        }
-        if (this.money < amount) {
-            throw new InsufficientBalanceException();
-        }
-        this.money -= amount;
+        this.money.withdraw(amount);
     }
 
     public void depositPoint(long amount) {
-        if (amount <= 0) {
-            throw new InvalidAMountException();
-        }
-        this.point += amount;
+        this.point.deposit(amount);
     }
 
     public void withdrawPoint(long amount) {
-        if (amount <= 0) {
-            throw new InvalidAMountException();
+        this.point.withdraw(amount);
+    }
+
+    // 에스크로 위임 메소드
+    // 머니
+    public void moveMoneyToEscrow(long amount) {
+        this.money.moveToEscrow(amount);
+    }
+
+    public void releaseMoneyEscrow(long amount) {
+        this.money.releaseEscrow(amount);
+    }
+
+    public void deductMoneyEscrow(long amount) {
+        this.money.deductEscrow(amount);
+    }
+
+    // 포인트
+    public void movePointToEscrow(long amount) {
+        this.point.moveToEscrow(amount);
+    }
+
+    public void releasePointEscrow(long amount) {
+        this.point.releaseEscrow(amount);
+    }
+
+    public void deductPointEscrow(long amount) {
+        this.point.deductEscrow(amount);
+    }
+
+    // 복합 결제
+    public void withdrawComposite(long moneyAmount, long pointAmount) {
+        if (moneyAmount > 0) {
+            this.money.withdraw(moneyAmount);
         }
-        if (this.point < amount) {
-            throw new InsufficientBalanceException();
+        if (pointAmount > 0) {
+            this.point.withdraw(pointAmount);
         }
-        this.point -= amount;
+    }
+
+    public void moveCompositeToEscrow(long moneyAmount, long pointAmount) {
+        if (moneyAmount > 0) {
+            this.money.moveToEscrow(moneyAmount);
+        }
+        if (pointAmount > 0) {
+            this.point.moveToEscrow(pointAmount);
+        }
+    }
+
+    public void releaseCompositeEscrow(long moneyAmount, long pointAmount) {
+        if (moneyAmount > 0) {
+            this.money.releaseEscrow(moneyAmount);
+        }
+        if (pointAmount > 0) {
+            this.point.releaseEscrow(pointAmount);
+        }
+    }
+
+    public Long getMoneyBalance() {
+        return this.money.getBalance();
+    }
+
+    public Long getMoneyEscrow() {
+        return this.money.getEscrow();
+    }
+
+    public Long getTotalMoney() {
+        return this.money.getTotal();
+    }
+
+    public Long getPointBalance() {
+        return this.point.getBalance();
+    }
+
+    public Long getPointEscrow() {
+        return this.point.getEscrow();
+    }
+
+    public Long getTotalPoint() {
+        return this.point.getTotal();
     }
 }
